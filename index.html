@@ -15,92 +15,22 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
         
+        const PILOT_STATS = {
+          completed: 47,
+          unaware: 3,
+          curious: 13,
+          experimenter: 18,
+          integrator: 10,
+          champion: 3
+        };
+ 
         const SingaporeAIQuiz = () => {
           const [currentQuestion, setCurrentQuestion] = useState(0);
           const [answers, setAnswers] = useState([]);
           const [showResult, setShowResult] = useState(false);
           const [showStats, setShowStats] = useState(false);
-          const [showDetailedStats, setShowDetailedStats] = useState(false);
           const [scores, setScores] = useState({ unaware: 0, curious: 0, experimenter: 0, integrator: 0, champion: 0 });
-          const [startTime, setStartTime] = useState(null);
-          const [sessionId] = useState(() => 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9));
-
-          // Initialize session tracking
-          useEffect(() => {
-            const now = new Date();
-            setStartTime(now);
-            
-            // Track session start
-            const sessionData = {
-              sessionId,
-              startTime: now.toISOString(),
-              userAgent: navigator.userAgent,
-              screenSize: `${window.screen.width}x${window.screen.height}`,
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-            };
-            
-            trackEvent('session_start', sessionData);
-          }, []);
-
-          // Track events
-          const trackEvent = (eventType, data = {}) => {
-            const events = JSON.parse(localStorage.getItem('sg_ai_quiz_events') || '[]');
-            const event = {
-              sessionId,
-              eventType,
-              timestamp: new Date().toISOString(),
-              data
-            };
-            events.push(event);
-            
-            // Keep only last 1000 events to prevent storage bloat
-            if (events.length > 1000) {
-              events.splice(0, events.length - 1000);
-            }
-            
-            localStorage.setItem('sg_ai_quiz_events', JSON.stringify(events));
-          };
-
-          // Load statistics from localStorage
-          const loadStats = () => {
-            const saved = localStorage.getItem('sg_ai_quiz_stats');
-            if (saved) {
-              return JSON.parse(saved);
-            }
-            return {
-              total: 0,
-              completed: 0,
-              unaware: 0,
-              curious: 0,
-              experimenter: 0,
-              integrator: 0,
-              champion: 0,
-              totalTime: 0,
-              questionDropoffs: Array(10).fill(0),
-              answerCounts: {}
-            };
-          };
-
-          // Save result to statistics
-          const saveResult = (resultType) => {
-            const stats = loadStats();
-            const completionTime = startTime ? (new Date() - startTime) / 1000 : 0;
-            
-            stats.total += 1;
-            stats.completed += 1;
-            stats[resultType] += 1;
-            stats.totalTime += completionTime;
-            
-            localStorage.setItem('sg_ai_quiz_stats', JSON.stringify(stats));
-            
-            // Track completion
-            trackEvent('quiz_completed', {
-              resultType,
-              completionTime,
-              answers: answers.length
-            });
-          };
-
+ 
           const questions = [
             {
               id: 1,
@@ -213,7 +143,7 @@
               ]
             }
           ];
-
+ 
           const results = {
             unaware: {
               title: "The Steady Traditionalist",
@@ -229,9 +159,9 @@
               subtitle: "Ready to dive deeper",
               description: "You're aware of AI's potential and eager to learn more. Your curiosity is your superpower! You're asking the right questions and ready to take the next step.",
               strengths: "Growth mindset, willingness to learn, good at identifying opportunities",
-              nextSteps: "Try ChatGPT or Google Bard for work tasks. Join AI meetups like Singapore AI Developers Group (https://www.meetup.com/singapore-ai-developers-group) or attend Singapore Youth AI meetups.",
+              nextSteps: "Try ChatGPT or Google Gemini for work tasks. Join AI meetups or attend Singapore Youth AI meetups to connect with others on the same journey.",
               timeframe: "3-6 months to become AI Experimenter", 
-              localTips: "Explore SkillsFuture AI courses (https://www.myskillsfuture.gov.sg) and connect with AI Singapore's community through AI4SME platform (https://ai4sme.aisingapore.org)."
+              localTips: "Explore SkillsFuture AI courses (https://www.myskillsfuture.gov.sg) and connect with AI Singapore's community through the AI4SME platform (https://ai4sme.aisingapore.org)."
             },
             experimenter: {
               title: "The Practical Pioneer",
@@ -261,79 +191,37 @@
               localTips: "Connect with AI Singapore's research initiatives (https://aisingapore.org), apply for the AI Apprenticeship Programme (https://aiap.sg), and contribute to Singapore's AI ecosystem through the National AI Strategy 2.0."
             }
           };
-
+ 
           const handleAnswer = (option) => {
             const newAnswers = [...answers, option];
             setAnswers(newAnswers);
-            
-            // Track answer selection
-            trackEvent('answer_selected', {
-              questionIndex: currentQuestion,
-              questionText: questions[currentQuestion].question,
-              answerText: option.text,
-              answerIndex: questions[currentQuestion].options.indexOf(option)
-            });
-            
-            // Update answer counts in stats
-            const stats = loadStats();
-            const questionKey = `q${currentQuestion}`;
-            if (!stats.answerCounts[questionKey]) {
-              stats.answerCounts[questionKey] = {};
-            }
-            const answerKey = `option_${questions[currentQuestion].options.indexOf(option)}`;
-            stats.answerCounts[questionKey][answerKey] = (stats.answerCounts[questionKey][answerKey] || 0) + 1;
-            localStorage.setItem('sg_ai_quiz_stats', JSON.stringify(stats));
             
             const newScores = { ...scores };
             Object.keys(option.points).forEach(level => {
               newScores[level] += option.points[level];
             });
             setScores(newScores);
-
+ 
             if (currentQuestion < questions.length - 1) {
               setCurrentQuestion(currentQuestion + 1);
             } else {
-              // Calculate result
               const maxScore = Math.max(...Object.values(newScores));
               const resultType = Object.keys(newScores).find(key => newScores[key] === maxScore);
-              saveResult(resultType);
               setTimeout(() => setShowResult(resultType), 500);
             }
           };
-
+ 
           const resetQuiz = () => {
-            // Track abandonment if not completed
-            if (!showResult && currentQuestion > 0) {
-              const stats = loadStats();
-              stats.questionDropoffs[currentQuestion] += 1;
-              localStorage.setItem('sg_ai_quiz_stats', JSON.stringify(stats));
-              
-              trackEvent('quiz_abandoned', {
-                questionIndex: currentQuestion,
-                answersCompleted: answers.length
-              });
-            }
-            
             setCurrentQuestion(0);
             setAnswers([]);
             setShowResult(false);
             setShowStats(false);
-            setShowDetailedStats(false);
             setScores({ unaware: 0, curious: 0, experimenter: 0, integrator: 0, champion: 0 });
-            setStartTime(new Date());
-            
-            trackEvent('quiz_restarted');
           };
-
+ 
           const shareResult = () => {
             const result = results[showResult];
             const text = `I just discovered I'm "${result.title}" in AI readiness! 🚀 What's your AI kiasu level?`;
-            
-            trackEvent('result_shared', {
-              resultType: showResult,
-              shareMethod: navigator.share ? 'native' : 'clipboard'
-            });
-            
             if (navigator.share) {
               navigator.share({ text });
             } else {
@@ -341,154 +229,46 @@
               alert('Result copied to clipboard!');
             }
           };
-
-          const toggleStats = () => {
-            setShowStats(!showStats);
-            trackEvent('stats_toggled', { showing: !showStats });
-          };
-
-          const toggleDetailedStats = () => {
-            setShowDetailedStats(!showDetailedStats);
-            trackEvent('detailed_stats_toggled', { showing: !showDetailedStats });
-          };
-
-          const getAnalytics = () => {
-            const events = JSON.parse(localStorage.getItem('sg_ai_quiz_events') || '[]');
-            const stats = loadStats();
-            
-            // Calculate completion rate
-            const sessionsStarted = events.filter(e => e.eventType === 'session_start').length;
-            const completionRate = sessionsStarted > 0 ? Math.round((stats.completed / sessionsStarted) * 100) : 0;
-            
-            // Calculate average completion time
-            const avgTime = stats.completed > 0 ? Math.round(stats.totalTime / stats.completed) : 0;
-            
-            // Peak usage analysis
-            const hourCounts = {};
-            const dayCounts = {};
-            events.forEach(event => {
-              const date = new Date(event.timestamp);
-              const hour = date.getHours();
-              const day = date.toLocaleDateString('en-SG', { weekday: 'long' });
-              hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-              dayCounts[day] = (dayCounts[day] || 0) + 1;
-            });
-            
-            const peakHour = Object.keys(hourCounts).reduce((a, b) => hourCounts[a] > hourCounts[b] ? a : b, '0');
-            const peakDay = Object.keys(dayCounts).reduce((a, b) => dayCounts[a] > dayCounts[b] ? a : b, 'Monday');
-            
-            // Drop-off analysis
-            const totalDropoffs = stats.questionDropoffs.reduce((a, b) => a + b, 0);
-            const maxDropoffIndex = stats.questionDropoffs.indexOf(Math.max(...stats.questionDropoffs));
-            
-            return {
-              sessionsStarted,
-              completionRate,
-              avgTime,
-              peakHour,
-              peakDay,
-              totalDropoffs,
-              maxDropoffQuestion: maxDropoffIndex + 1,
-              maxDropoffCount: stats.questionDropoffs[maxDropoffIndex]
-            };
-          };
-
+ 
           const StatsDisplay = () => {
-            const stats = loadStats();
-            if (stats.total === 0) return null;
-
-            const getPercentage = (count) => Math.round((count / stats.completed) * 100);
-
+            const getPercentage = (count) => Math.round((count / PILOT_STATS.completed) * 100);
             return (
               <div className="bg-blue-50 p-4 rounded-lg mt-4">
-                <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                <h3 className="font-semibold text-blue-800 mb-1 flex items-center gap-2">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="20" x2="18" y2="10"></line>
                     <line x1="12" y1="20" x2="12" y2="4"></line>
                     <line x1="6" y1="20" x2="6" y2="14"></line>
                   </svg>
-                  Community Results ({stats.completed} completed)
+                  Internal Pilot Results (n={PILOT_STATS.completed})
                 </h3>
+                <p className="text-xs text-blue-600 mb-3 italic">IAL colleagues, 2024</p>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Steady Traditionalists:</span>
-                    <span className="font-medium">{getPercentage(stats.unaware)}% ({stats.unaware})</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Interested Explorers:</span>
-                    <span className="font-medium">{getPercentage(stats.curious)}% ({stats.curious})</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Practical Pioneers:</span>
-                    <span className="font-medium">{getPercentage(stats.experimenter)}% ({stats.experimenter})</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Connected Catalysts:</span>
-                    <span className="font-medium">{getPercentage(stats.integrator)}% ({stats.integrator})</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Innovation Leaders:</span>
-                    <span className="font-medium">{getPercentage(stats.champion)}% ({stats.champion})</span>
-                  </div>
-                </div>
-                
-                <button 
-                  onClick={toggleDetailedStats}
-                  className="mt-3 text-blue-600 text-sm hover:text-blue-800 underline"
-                >
-                  {showDetailedStats ? 'Hide' : 'Show'} Detailed Analytics
-                </button>
-                
-                {showDetailedStats && <DetailedStatsDisplay />}
-              </div>
-            );
-          };
-
-          const DetailedStatsDisplay = () => {
-            const analytics = getAnalytics();
-            const stats = loadStats();
-            
-            return (
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <h4 className="font-semibold text-blue-800 mb-3">📊 Detailed Analytics</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Sessions Started:</span>
-                      <span className="font-medium">{analytics.sessionsStarted}</span>
+                  {[
+                    { key: 'unaware', label: 'Steady Traditionalists' },
+                    { key: 'curious', label: 'Interested Explorers' },
+                    { key: 'experimenter', label: 'Practical Pioneers' },
+                    { key: 'integrator', label: 'Connected Catalysts' },
+                    { key: 'champion', label: 'Innovation Leaders' },
+                  ].map(({ key, label }) => (
+                    <div key={key}>
+                      <div className="flex justify-between mb-1">
+                        <span>{label}</span>
+                        <span className="font-medium">{getPercentage(PILOT_STATS[key])}% ({PILOT_STATS[key]})</span>
+                      </div>
+                      <div className="w-full bg-blue-100 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-500 h-1.5 rounded-full"
+                          style={{ width: `${getPercentage(PILOT_STATS[key])}%` }}
+                        ></div>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Completion Rate:</span>
-                      <span className="font-medium">{analytics.completionRate}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Avg. Time:</span>
-                      <span className="font-medium">{Math.floor(analytics.avgTime / 60)}m {analytics.avgTime % 60}s</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Peak Usage:</span>
-                      <span className="font-medium">{analytics.peakDay}s, {analytics.peakHour}:00</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Total Drop-offs:</span>
-                      <span className="font-medium">{analytics.totalDropoffs}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Most Difficult Q:</span>
-                      <span className="font-medium">#{analytics.maxDropoffQuestion} ({analytics.maxDropoffCount} drops)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Retakes:</span>
-                      <span className="font-medium">{stats.total - analytics.sessionsStarted}</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             );
           };
-
+ 
           if (showResult) {
             const result = results[showResult];
             return (
@@ -507,22 +287,18 @@
                       <h3 className="font-semibold text-gray-800 mb-2">Your AI Journey</h3>
                       <p className="text-gray-600">{result.description}</p>
                     </div>
-                    
                     <div>
                       <h3 className="font-semibold text-gray-800 mb-2">Your Strengths</h3>
                       <p className="text-gray-600">{result.strengths}</p>
                     </div>
-                    
                     <div>
                       <h3 className="font-semibold text-gray-800 mb-2">Next Steps</h3>
                       <p className="text-gray-600">{result.nextSteps}</p>
                     </div>
-                    
                     <div>
                       <h3 className="font-semibold text-gray-800 mb-2">Timeline</h3>
                       <p className="text-gray-600">{result.timeframe}</p>
                     </div>
-                    
                     <div className="bg-red-50 p-4 rounded-lg">
                       <h3 className="font-semibold text-red-800 mb-2">Singapore-Specific Tips</h3>
                       <p className="text-red-700">{result.localTips}</p>
@@ -554,10 +330,10 @@
                       Share Result
                     </button>
                   </div>
-                  
+ 
                   <div className="mt-4">
                     <button 
-                      onClick={toggleStats}
+                      onClick={() => setShowStats(!showStats)}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -565,7 +341,7 @@
                         <line x1="12" y1="20" x2="12" y2="4"></line>
                         <line x1="6" y1="20" x2="6" y2="14"></line>
                       </svg>
-                      {showStats ? 'Hide' : 'Show'} Community Results
+                      {showStats ? 'Hide' : 'See How Others Scored'}
                     </button>
                     {showStats && <StatsDisplay />}
                   </div>
@@ -573,7 +349,7 @@
               </div>
             );
           }
-
+ 
           return (
             <div className="max-w-2xl mx-auto p-6 bg-gradient-to-br from-red-50 to-orange-50 min-h-screen">
               <div className="bg-white rounded-lg shadow-lg p-8">
@@ -608,7 +384,6 @@
                   <h2 className="text-xl font-semibold text-gray-800 mb-6 leading-relaxed">
                     {questions[currentQuestion].question}
                   </h2>
-                  
                   <div className="space-y-3">
                     {questions[currentQuestion].options.map((option, index) => (
                       <button
@@ -636,9 +411,9 @@
             </div>
           );
         };
-
+ 
         ReactDOM.render(<SingaporeAIQuiz />, document.getElementById('root'));
     </script>
 </body>
-
 </html>
+ 
